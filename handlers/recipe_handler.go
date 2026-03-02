@@ -9,9 +9,9 @@ import (
 )
 
 func GetIngredients(c *gin.Context) {
-    var ingredients []models.Ingredient
-    database.DB.Order("name asc").Find(&ingredients)
-    c.JSON(200, ingredients)
+	var ingredients []models.Ingredient
+	database.DB.Order("name asc").Find(&ingredients)
+	c.JSON(200, ingredients)
 }
 
 type MatchRequest struct {
@@ -32,7 +32,6 @@ func MatchRecipes(c *gin.Context) {
 		return
 	}
 
-	// Query Params
 	minMatch := 0.0
 	if v := c.Query("min_match"); v != "" {
 		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
@@ -41,7 +40,6 @@ func MatchRecipes(c *gin.Context) {
 	}
 
 	exact := c.Query("exact") == "true"
-
 	page := 1
 	limit := 10
 
@@ -50,14 +48,12 @@ func MatchRecipes(c *gin.Context) {
 			page = p
 		}
 	}
-
 	if v := c.Query("limit"); v != "" {
 		if l, err := strconv.Atoi(v); err == nil && l > 0 {
 			limit = l
 		}
 	}
 
-	// Get Ingredient IDs
 	var ingredients []models.Ingredient
 	database.DB.Where("normalized_name IN ?", req.Ingredients).Find(&ingredients)
 
@@ -71,10 +67,12 @@ func MatchRecipes(c *gin.Context) {
 		inputIDs = append(inputIDs, ing.ID)
 	}
 
-	// Use raw SQL to avoid HAVING alias issue in MySQL
 	type Result struct {
 		ID           uint
 		Title        string
+		Instructions string
+		CookingTime  int
+		Difficulty   string
 		TotalCount   int
 		MatchedCount int
 	}
@@ -85,12 +83,15 @@ func MatchRecipes(c *gin.Context) {
 		SELECT
 			r.id,
 			r.title,
+			r.instructions,
+			r.cooking_time,
+			r.difficulty,
 			COUNT(DISTINCT CASE WHEN ri.is_optional = false THEN ri.id END) as total_count,
 			COUNT(DISTINCT CASE WHEN ri.is_optional = false AND ri.ingredient_id IN ? THEN ri.id END) as matched_count
 		FROM recipes r
 		JOIN recipe_ingredients ri ON ri.recipe_id = r.id
 		WHERE r.deleted_at IS NULL AND ri.deleted_at IS NULL
-		GROUP BY r.id, r.title
+		GROUP BY r.id, r.title, r.instructions, r.cooking_time, r.difficulty
 		HAVING COUNT(DISTINCT CASE WHEN ri.is_optional = false AND ri.ingredient_id IN ? THEN ri.id END) > 0
 		ORDER BY matched_count DESC
 	`, inputIDs, inputIDs).Scan(&results)
@@ -107,12 +108,10 @@ func MatchRecipes(c *gin.Context) {
 		if exact && r.MatchedCount != r.TotalCount {
 			continue
 		}
-
 		if !exact && score < minMatch {
 			continue
 		}
 
-		// Get missing ingredients
 		var missing []string
 		database.DB.Raw(`
 			SELECT i.name
@@ -131,6 +130,9 @@ func MatchRecipes(c *gin.Context) {
 		response = append(response, gin.H{
 			"id":                  r.ID,
 			"title":               r.Title,
+			"instructions":        r.Instructions,
+			"cooking_time":        r.CookingTime,
+			"difficulty":          r.Difficulty,
 			"match_percentage":    score,
 			"missing_ingredients": missing,
 		})
@@ -143,7 +145,6 @@ func MatchRecipes(c *gin.Context) {
 	totalResults := len(response)
 	start := (page - 1) * limit
 	end := start + limit
-
 	if start > totalResults {
 		start = totalResults
 	}
