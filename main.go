@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/dhavisiregar/masak-apa/database"
 	"github.com/dhavisiregar/masak-apa/handlers"
@@ -29,12 +30,19 @@ func main() {
 
 	r := gin.Default()
 
-	r.Use(cors.Default())
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders: []string{"Content-Type"},
+	}))
 
-	// r.GET("/list-models", handlers.ListModels)
 	r.GET("/ingredients", handlers.GetIngredients)
 	r.POST("/match-recipes", handlers.MatchRecipes)
 	r.POST("/suggest", handlers.SuggestDishes)
 
-	r.Run(":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	r.Run(":" + port)
 }
