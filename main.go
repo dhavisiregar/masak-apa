@@ -20,18 +20,21 @@ func main() {
 
 	database.Connect()
 
-	database.DB.AutoMigrate(
-		&models.Recipe{},
-		&models.Ingredient{},
-		&models.RecipeIngredient{},
-	)
-
-	seed.SeedData()
+	// Run migration and seeding in background so server starts immediately
+	go func() {
+		database.DB.AutoMigrate(
+			&models.Recipe{},
+			&models.Ingredient{},
+			&models.RecipeIngredient{},
+		)
+		seed.SeedData()
+		log.Println("Migration and seeding completed")
+	}()
 
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"https://masak-apa-fe.vercel.app"},
+		AllowOrigins: []string{"*"},
 		AllowMethods: []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders: []string{"Content-Type"},
 	}))
